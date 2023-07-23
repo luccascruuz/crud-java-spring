@@ -12,7 +12,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/product")
-public class productController {
+public class ProductController {
     @Autowired
     private ProductRepository repository;
     @GetMapping
