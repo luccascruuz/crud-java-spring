@@ -1,99 +1,125 @@
 package com.example.crud.controllers;
 
-import com.example.crud.domain.product.Product;
-import com.example.crud.domain.product.ProductRepository;
-import com.example.crud.domain.product.RequestProduct;
+import com.example.crud.dto.ProductRequest;
+import com.example.crud.dto.ProductResponse;
+import com.example.crud.exception.ProductNotFoundException;
+import com.example.crud.service.ProductService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
+import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProductController.class)
-public class ProductControllerTests {
+class ProductControllerTests {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
-    private ProductRepository productRepository;
+    @MockitoBean
+    private ProductService service;
 
     @Test
-    public void testGetAllProducts() throws Exception {
+    void getAllProductsReturnsList() throws Exception {
+        when(service.findAll()).thenReturn(List.of(
+                new ProductResponse("1", "Product 1", 100),
+                new ProductResponse("2", "Product 2", 200)));
 
-        List<Product> productList = new ArrayList<>();
-        productList.add(new Product("1", "Product 1", 100));
-        productList.add(new Product("2", "Product 2", 200));
-        when(productRepository.findAll()).thenReturn(productList);
-
-        mockMvc.perform(MockMvcRequestBuilders.get("/product"))
+        mockMvc.perform(get("/product"))
                 .andExpect(status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$.length()").value(2))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[0].name").value("Product 1"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[1].name").value("Product 2"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[0].price_in_cents").value(100))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[1].price_in_cents").value(200));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].name").value("Product 1"))
+                .andExpect(jsonPath("$[1].price_in_cents").value(200));
     }
 
     @Test
-    public void testGetProduct() throws Exception {
+    void getProductReturnsProduct() throws Exception {
+        when(service.findById("1")).thenReturn(new ProductResponse("1", "Test Product", 150));
 
-        Product product = new Product("1", "Test Product", 150);
-        when(productRepository.findById("1")).thenReturn(Optional.of(product));
-
-        mockMvc.perform(MockMvcRequestBuilders.get("/product/1"))
+        mockMvc.perform(get("/product/1"))
                 .andExpect(status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$.name").value("Test Product"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$.price_in_cents").value(150));
+                .andExpect(jsonPath("$.id").value("1"))
+                .andExpect(jsonPath("$.name").value("Test Product"))
+                .andExpect(jsonPath("$.price_in_cents").value(150));
     }
 
     @Test
-    public void testRegisterProduct() throws Exception {
+    void getProductReturnsNotFoundWhenMissing() throws Exception {
+        when(service.findById("missing")).thenThrow(new ProductNotFoundException("missing"));
 
-        RequestProduct requestProduct = new RequestProduct("Test Product", "Test Product", 200);
-        String requestJson = "{ \"name\": \"Test Product\", \"price_in_cents\": 200 }";
-
-        mockMvc.perform(MockMvcRequestBuilders.post("/product")
-                        .contentType("application/json")
-                        .content(requestJson))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/product/missing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Product not found"));
     }
 
     @Test
-    public void testUpdateProduct() throws Exception {
+    void registerProductReturnsCreated() throws Exception {
+        when(service.create(new ProductRequest("Test Product", 200)))
+                .thenReturn(new ProductResponse("abc", "Test Product", 200));
 
-        Product product = new Product("1", "Product", 100);
-        when(productRepository.findById("1")).thenReturn(Optional.of(product));
+        mockMvc.perform(post("/product")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"name\": \"Test Product\", \"price_in_cents\": 200 }"))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "http://localhost/product/abc"))
+                .andExpect(jsonPath("$.id").value("abc"));
+    }
 
-        RequestProduct requestData = new RequestProduct("1", "Updated Product", 150);
-        String requestJson = "{ \"name\": \"Updated Product\", \"price_in_cents\": 150 }";
+    @Test
+    void registerProductRejectsInvalidBody() throws Exception {
+        mockMvc.perform(post("/product")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"name\": \"\", \"price_in_cents\": -1 }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.name").exists())
+                .andExpect(jsonPath("$.errors.price_in_cents").exists());
 
-        mockMvc.perform(MockMvcRequestBuilders.put("/product/1")
-                        .contentType("application/json")
-                        .content(requestJson))
+        verify(service, never()).create(any());
+    }
+
+    @Test
+    void updateProductReturnsUpdatedProduct() throws Exception {
+        when(service.update(eq("1"), any(ProductRequest.class)))
+                .thenReturn(new ProductResponse("1", "Updated Product", 150));
+
+        mockMvc.perform(put("/product/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"name\": \"Updated Product\", \"price_in_cents\": 150 }"))
                 .andExpect(status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$.name").value("Updated Product"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$.price_in_cents").value(150));
+                .andExpect(jsonPath("$.name").value("Updated Product"))
+                .andExpect(jsonPath("$.price_in_cents").value(150));
     }
 
     @Test
-    public void testDeleteProduct() throws Exception {
+    void deleteProductReturnsNoContent() throws Exception {
+        mockMvc.perform(delete("/product/1"))
+                .andExpect(status().isNoContent());
 
-        Product product = new Product("1", "Test Product", 200);
-        when(productRepository.findById("1")).thenReturn(Optional.of(product));
-
-        mockMvc.perform(MockMvcRequestBuilders.delete("/product/1"))
-                .andExpect(status().isOk());
+        verify(service).delete("1");
     }
 
+    @Test
+    void deleteProductReturnsNotFoundWhenMissing() throws Exception {
+        doThrow(new ProductNotFoundException("missing")).when(service).delete("missing");
 
-
+        mockMvc.perform(delete("/product/missing"))
+                .andExpect(status().isNotFound());
+    }
 }

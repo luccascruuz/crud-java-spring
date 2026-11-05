@@ -1,67 +1,62 @@
 package com.example.crud.controllers;
 
-import com.example.crud.domain.product.Product;
-import com.example.crud.domain.product.ProductRepository;
-import com.example.crud.domain.product.RequestProduct;
+import com.example.crud.dto.ProductRequest;
+import com.example.crud.dto.ProductResponse;
+import com.example.crud.service.ProductService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.util.Optional;
+import java.net.URI;
+import java.util.List;
 
 @RestController
 @RequestMapping("/product")
 public class ProductController {
-    @Autowired
-    private ProductRepository repository;
+
+    private final ProductService service;
+
+    public ProductController(ProductService service) {
+        this.service = service;
+    }
+
     @GetMapping
-    public ResponseEntity getAllProducts() {
-        var allProducts = repository.findAll();
-        return ResponseEntity.ok(allProducts);
+    public ResponseEntity<List<ProductResponse>> getAllProducts() {
+        return ResponseEntity.ok(service.findAll());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity getProduct(@PathVariable String id) {
-        Optional<Product> optionalProduct = repository.findById(id);
-        if (optionalProduct.isPresent()) {
-            Product product = optionalProduct.get();
-            return ResponseEntity.ok(product);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+    public ResponseEntity<ProductResponse> getProduct(@PathVariable String id) {
+        return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
-    private ResponseEntity registerProduct(@RequestBody @Valid RequestProduct data) {
-        Product newProduct = new Product(data);
-        repository.save(newProduct);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<ProductResponse> registerProduct(@RequestBody @Valid ProductRequest request) {
+        ProductResponse created = service.create(request);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(created.id())
+                .toUri();
+        return ResponseEntity.created(location).body(created);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity updateProduct(@PathVariable String id, @RequestBody @Valid RequestProduct data) {
-        Optional<Product> optionalProduct = repository.findById(id);
-        if (optionalProduct.isPresent()) {
-            Product product = optionalProduct.get();
-            product.setName(data.name());
-            product.setPrice_in_cents(data.price_in_cents());
-            repository.save(product);
-            return ResponseEntity.ok(product);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+    public ResponseEntity<ProductResponse> updateProduct(@PathVariable String id,
+                                                         @RequestBody @Valid ProductRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity deleteProduct(@PathVariable String id) {
-        Optional<Product> optionalProduct = repository.findById(id);
-        if(optionalProduct.isPresent()) {
-            Product product = optionalProduct.get();
-            repository.delete(product);
-            return ResponseEntity.ok().build();
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+    public ResponseEntity<Void> deleteProduct(@PathVariable String id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

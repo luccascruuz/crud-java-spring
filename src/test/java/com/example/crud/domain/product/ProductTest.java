@@ -1,39 +1,52 @@
 package com.example.crud.domain.product;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.test.util.ReflectionTestUtils;
 
-public class ProductTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+class ProductTest {
 
     @Test
-    public void testConstructorAndGetters() {
+    void constructorSetsFieldsAndLeavesIdEmpty() {
+        Product product = new Product("Test Product", 100);
 
-        String name = "Test Product";
-        Integer priceInCents = 100;
-        RequestProduct requestProduct = new RequestProduct(null, name, priceInCents);
-
-        Product product = new Product(requestProduct);
-
-        assertEquals(name, product.getName());
-        assertEquals(priceInCents, product.getPrice_in_cents());
+        assertEquals("Test Product", product.getName());
+        assertEquals(100, product.getPriceInCents());
         assertNull(product.getId());
     }
 
     @Test
-    public void testEqualsAndHashCode() {
+    void updateReplacesNameAndPrice() {
+        Product product = new Product("Old", 100);
 
-        String id = "1";
-        String name = "Test Product";
-        Integer priceInCents = 100;
+        product.update("New", 250);
 
-        Product product1 = new Product(id, name, priceInCents);
-        Product product2 = new Product(id, name, priceInCents);
-        Product product3 = new Product("2", name, priceInCents);
+        assertEquals("New", product.getName());
+        assertEquals(250, product.getPriceInCents());
+    }
 
-        assertEquals(product1, product2);
-        assertNotEquals(product1, product3);
+    @Test
+    void equalityIsBasedOnId() {
+        Product first = productWithId("1", "A", 100);
+        Product sameId = productWithId("1", "B", 200);
+        Product otherId = productWithId("2", "A", 100);
 
-        assertEquals(product1.hashCode(), product2.hashCode());
-        assertNotEquals(product1.hashCode(), product3.hashCode());
+        assertEquals(first, sameId);
+        assertEquals(first.hashCode(), sameId.hashCode());
+        assertNotEquals(first, otherId);
+    }
+
+    @Test
+    void transientProductsAreNotEqual() {
+        assertNotEquals(new Product("A", 100), new Product("A", 100));
+    }
+
+    private static Product productWithId(String id, String name, int priceInCents) {
+        Product product = new Product(name, priceInCents);
+        ReflectionTestUtils.setField(product, "id", id);
+        return product;
     }
 }
